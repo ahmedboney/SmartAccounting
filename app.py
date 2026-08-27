@@ -1419,10 +1419,13 @@ if __name__ == "__main__":
     except OSError:
         ip = "127.0.0.1"
 
+    import os as _os
+    PORT = int(_os.environ.get("PORT", "5000"))
+
     # في النسخة المجمّعة (EXE) نفتح المتصفح تلقائيًا بعد إقلاع السيرفر
     if getattr(sys, "frozen", False):
         import threading
         import webbrowser
-        threading.Timer(2.0, lambda: webbrowser.open("http://localhost:5000")).start()
+        threading.Timer(2.0, lambda: webbrowser.open(f"http://localhost:{PORT}")).start()
 
-    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+    app.run(host="0.0.0.0", port=PORT, debug=False, threaded=True)
