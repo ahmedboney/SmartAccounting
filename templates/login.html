@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تسجيل الدخول — النظام المحاسبي</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%23d9a441'/><text x='50' y='68' font-size='52' text-anchor='middle'>ح</text></svg>">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="logo-circle">ح</div>
+      <h1>النظام المحاسبي المتكامل</h1>
+      <p class="sub">قيود اليومية • الأستاذ العام • ميزان المراجعة</p>
+
+      {% if error %}<div class="alert err">{{ error }}</div>{% endif %}
+
+      <form method="post" action="/login">
+        <div class="field">
+          <label>اسم المستخدم</label>
+          <input type="text" name="username" required autofocus autocomplete="username" placeholder="admin">
+        </div>
+        <div class="field">
+          <label>كلمة المرور</label>
+          <input type="password" name="password" required autocomplete="current-password" placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn btn-gold btn-block">دخــول</button>
+      </form>
+
+      <p style="margin-top:24px;color:var(--muted);font-size:12px;line-height:1.8">
+        © جميع الحقوق محفوظة — <b style="color:var(--gold)">محاسب / أحمد عبدالله</b>
+      </p>
+    </div>
+  </div>
+</body>
+</html>

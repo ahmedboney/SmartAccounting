@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}سجل العمليات{% endblock %}
+{% block page_title %}سجل العمليات{% endblock %}
+{% block content %}
+
+<div class="panel">
+  <div class="panel-head"><h3>🛡️ آخر 300 عملية</h3></div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th class="num">التاريخ والوقت</th><th>المستخدم</th><th>العملية</th><th>التفاصيل</th></tr></thead>
+      <tbody>
+        {% for l in logs %}
+        <tr>
+          <td class="num">{{ l.at }}</td>
+          <td>{{ l.user }}</td>
+          <td><span class="badge region">{{ l.action }}</span></td>
+          <td>{{ l.details or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="empty-state">لا توجد عمليات مسجلة بعد</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}الموازنة التقديرية{% endblock %}
+{% block page_title %}الموازنة التقديرية — Budget vs Actual{% endblock %}
+{% block content %}
+
+<div class="panel">
+  <div class="panel-head">
+    <h3>📊 تقرير الموازنة التقديرية</h3>
+    <div class="toolbar">
+      {% if user.role != 'viewer' %}
+      <button class="btn btn-teal btn-sm" onclick="openBudgetModal()">✏️ تحديث الميزانيات</button>
+      {% endif %}
+      <a class="btn btn-gold btn-sm" href="/budget/export.xlsx" id="export-btn">📄 تصدير Excel</a>
+    </div>
+  </div>
+
+  <div class="filters-bar">
+    <div class="field"><label>من تاريخ</label><input type="date" id="f-from"></div>
+    <div class="field"><label>إلى تاريخ</label><input type="date" id="f-to"></div>
+    <div class="field"><label>المنطقة</label>
+      <select id="f-region"><option value="">— الكل —</option></select>
+    </div>
+    <div class="field"><label>نوع الحساب</label>
+      <select id="f-type">
+        <option value="">— الكل —</option>
+        <option value="أصول">أصول</option>
+        <option value="خصوم">خصوم</option>
+        <option value="إيرادات">إيرادات</option>
+        <option value="مصروفات">مصروفات</option>
+      </select>
+    </div>
+    <button class="btn btn-dark btn-sm" onclick="loadBudget()" style="align-self:flex-end">🔍 بحث</button>
+  </div>
+
+  <!-- ملخص سريع -->
+  <div class="budget-summary" id="budget-summary" style="display:none">
+    <div class="summary-card">
+      <div class="summary-label">الميزانية الإجمالية</div>
+      <div class="summary-value" id="sum-budget">0</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">ال Executed (المنفّذ)</div>
+      <div class="summary-value" id="sum-actual">0</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">الفرق</div>
+      <div class="summary-value" id="sum-variance">0</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">نسبة التنفيذ</div>
+      <div class="summary-value" id="sum-pct">0%</div>
+    </div>
+  </div>
+
+  <div class="tbl-wrap">
+    <table class="tbl" id="budget-table">
+      <thead>
+        <tr>
+          <th class="num">رقم</th>
+          <th>اسم الحساب</th>
+          <th>النوع</th>
+          <th class="num">الميزانية</th>
+          <th class="num">المنفّذ</th>
+          <th class="num">الفرق</th>
+          <th class="num">النسبة</th>
+          <th>الحالة</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- مودال تحديث الميزانيات -->
+<div class="modal-overlay" id="budgetModal">
+  <div class="modal modal-lg">
+    <div class="modal-head"><h3>تحديث الميزانيات التقديرية</h3>
+      <button class="modal-close" data-close-modal>×</button></div>
+    <div class="modal-body">
+      <div class="alert info" style="font-size:12.5px">
+        عدّل الميزانية التقديرية لكل حساب ثم اضغط حفظ. المبالغ بالجنيه المصري سنويًا.
+      </div>
+      <div class="tbl-wrap" style="max-height:60vh">
+        <table class="tbl" id="alloc-table">
+          <thead>
+            <tr>
+              <th class="num">رقم</th>
+              <th>اسم الحساب</th>
+              <th>النوع</th>
+              <th class="num">الميزانية الحالية</th>
+              <th class="num">الميزانية الجديدة</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-gold" onclick="saveBudgetAlloc()">💾 حفظ جميع التغييرات</button>
+      <button class="btn btn-dark" data-close-modal>إلغاء</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let BUDGET_DATA = [];
+
+async function loadRegions() {
+  try {
+    const d = await api('/api/regions');
+    const sel = $('#f-region');
+    (d.regions || []).filter(r => r.is_active).forEach(r => {
+      const o = document.createElement('option');
+      o.value = r.name; o.textContent = r.name;
+      sel.appendChild(o);
+    });
+  } catch(e) {}
+}
+
+async function loadBudget() {
+  const params = new URLSearchParams();
+  const fv = $('#f-from').value; if (fv) params.set('from', fv);
+  const tv = $('#f-to').value; if (tv) params.set('to', tv);
+  const rv = $('#f-region').value; if (rv) params.set('region', rv);
+  const tp = $('#f-type').value; if (tp) params.set('type', tp);
+  try {
+    const d = await api('/api/budget?' + params.toString());
+    BUDGET_DATA = d.entries;
+    renderBudget(d.entries, d.summary);
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+function renderBudget(list, summary) {
+  const tb = $('#budget-table tbody');
+  if (!list.length) {
+    tb.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="big">📊</div>لا توجد حسابات لعرضها — عدّل الفلاتر أو أضف ميزانيات للحسابات</td></tr>';
+    $('#budget-summary').style.display = 'none';
+    return;
+  }
+
+  tb.innerHTML = list.map(a => {
+    const varClass = a.variance >= 0 ? 'under' : 'over';
+    const pctClass = a.pct > 100 ? 'over' : a.pct > 90 ? 'warn' : 'under';
+    const statusClass = a.status.includes('تجاوز') ? 'badge-red' :
+                        a.status.includes('قريب') ? 'badge-yellow' :
+                        a.status.includes('ضمن') ? 'badge-green' :
+                        a.status.includes('أقل') ? 'badge-blue' : 'badge-gray';
+    return `<tr>
+      <td class="num">${esc(a.acc_no)}</td>
+      <td>${esc(a.name)}</td>
+      <td><span class="badge region">${esc(a.type)}</span></td>
+      <td class="num">${fmt(a.budget)}</td>
+      <td class="num">${fmt(a.actual)}</td>
+      <td class="num ${varClass}">${fmt(a.variance)}</td>
+      <td class="num ${pctClass}">${a.pct}%</td>
+      <td><span class="badge ${statusClass}">${esc(a.status)}</span></td>
+    </tr>`;
+  }).join('');
+
+  if (summary) {
+    $('#budget-summary').style.display = '';
+    $('#sum-budget').textContent = fmt(summary.budget);
+    $('#sum-actual').textContent = fmt(summary.actual);
+    $('#sum-variance').textContent = fmt(summary.variance);
+    $('#sum-variance').className = 'summary-value ' + (summary.variance >= 0 ? 'under' : 'over');
+    $('#sum-pct').textContent = summary.pct + '%';
+  }
+}
+
+function openBudgetModal() {
+  const tb = $('#alloc-table tbody');
+  tb.innerHTML = BUDGET_DATA.map(a => `
+    <tr data-id="${a.id}">
+      <td class="num">${esc(a.acc_no)}</td>
+      <td>${esc(a.name)}</td>
+      <td><span class="badge region">${esc(a.type)}</span></td>
+      <td class="num">${fmt(a.budget)}</td>
+      <td class="num"><input type="number" step="0.01" class="budget-input" value="${a.budget}" data-id="${a.id}"></td>
+    </tr>`).join('');
+  openModal('budgetModal');
+}
+
+async function saveBudgetAlloc() {
+  const inputs = document.querySelectorAll('.budget-input');
+  const items = [];
+  inputs.forEach(inp => {
+    items.push({ id: parseInt(inp.dataset.id), budget: parseFloat(inp.value || 0) });
+  });
+  if (!items.length) return toast('لا توجد بيانات', 'err');
+  try {
+    await api('/api/accounts/budget', { method: 'POST', body: { items } });
+    closeModal('budgetModal');
+    toast('تم تحديث الميزانيات بنجاح');
+    loadBudget();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+loadRegions();
+loadBudget();
+</script>
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}ميزان المراجعة{% endblock %}
+{% block page_title %}ميزان المراجعة{% endblock %}
+{% block content %}
+
+<div class="panel">
+  <div class="filters">
+    <div class="field"><label>من تاريخ</label><input type="date" id="flt-from"></div>
+    <div class="field"><label>إلى تاريخ</label><input type="date" id="flt-to"></div>
+    <div class="field"><label>المنطقة</label>
+      <select id="flt-region"><option value="">كل المناطق</option>
+        {% for r in REGIONS %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+      </select></div>
+    <button class="btn btn-teal" onclick="loadTB()">🔍 عرض الميزان</button>
+    <a class="btn btn-gold" href="#" onclick="exportLink();return false;">📊 تصدير Excel</a>
+  </div>
+
+  <div id="result">
+    <div class="empty-state"><div class="big">⚖️</div>حدد الفترة ثم اضغط «عرض الميزان»</div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function qs() {
+  const p = new URLSearchParams();
+  if ($('#flt-from').value) p.set('from', $('#flt-from').value);
+  if ($('#flt-to').value) p.set('to', $('#flt-to').value);
+  if ($('#flt-region').value) p.set('region', $('#flt-region').value);
+  return p.toString();
+}
+
+function exportLink() { location.href = '/trial-balance/export.xlsx?' + qs(); }
+
+async function loadTB() {
+  try {
+    const d = await api('/api/trial-balance?' + qs());
+    const t = d.totals;
+    const rowsHtml = d.rows.length ? d.rows.map(r => `
+        <tr>
+          <td class="num">${esc(r[0])}</td><td>${esc(r[1])}</td>
+          <td class="num">${r[2] ? fmt(r[2]) : ''}</td><td class="num">${r[3] ? fmt(r[3]) : ''}</td>
+          <td class="num">${r[4] ? fmt(r[4]) : ''}</td><td class="num">${r[5] ? fmt(r[5]) : ''}</td>
+          <td class="num" style="color:var(--green)">${r[6] ? fmt(r[6]) : ''}</td>
+          <td class="num" style="color:var(--red)">${r[7] ? fmt(r[7]) : ''}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="8" class="empty-state">لا توجد بيانات في هذه الفترة</td></tr>';
+
+    $('#result').innerHTML = `
+      <div style="padding:18px 20px;display:flex;gap:14px;align-items:center;border-bottom:1px solid var(--border)">
+        ${d.balanced
+          ? '<span class="balance-pill ok">✔ الميزان متوازن — حركة المدين تساوي الدائن</span>'
+          : '<span class="balance-pill bad">✖ الميزان غير متوازن!</span>'}
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th class="num">رقم الحساب</th><th>اسم الحساب</th>
+            <th class="num">افتتاحي مدين</th><th class="num">افتتاحي دائن</th>
+            <th class="num">حركة مدين</th><th class="num">حركة دائن</th>
+            <th class="num">رصيد مدين</th><th class="num">رصيد دائن</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+          <tfoot><tr>
+            <td colspan="2" style="text-align:center">الإجمالي</td>
+            <td class="num">${fmt(t.o_debit)}</td><td class="num">${fmt(t.o_credit)}</td>
+            <td class="num">${fmt(t.p_debit)}</td><td class="num">${fmt(t.p_credit)}</td>
+            <td class="num">${fmt(t.f_debit)}</td><td class="num">${fmt(t.f_credit)}</td>
+          </tr></tfoot>
+        </table>
+      </div>`;
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+$('#flt-from').value = '{{ period_from }}';
+$('#flt-to').value = '{{ period_to }}';
+loadTB();
+</script>
+{% endblock %}

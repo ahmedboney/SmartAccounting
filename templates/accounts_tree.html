@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}شجرة الحسابات{% endblock %}
+{% block page_title %}شجرة الحسابات{% endblock %}
+{% block content %}
+
+<div class="panel">
+  <div class="panel-head">
+    <h3>🌳 هيكل الحسابات</h3>
+    <div class="toolbar">
+      <button class="btn btn-dark btn-sm" onclick="expandAll()">⬇️ تفريع الكل</button>
+      <button class="btn btn-dark btn-sm" onclick="collapseAll()">⬆️ طي الكل</button>
+      <a class="btn btn-gold btn-sm" href="/accounts">📚 العرض المسطح</a>
+    </div>
+  </div>
+  <div class="tree-container" id="tree"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let TREE = [];
+
+async function loadTree() {
+  try {
+    const d = await api('/api/accounts/tree');
+    TREE = d.tree;
+    renderTree(TREE);
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+function renderTree(tree) {
+  const c = $('#tree');
+  c.innerHTML = tree.map(typeNode => `
+    <div class="tree-node tree-type">
+      <div class="tree-row" onclick="toggleNext(this)">
+        <span class="tw-arrow">▾</span>
+        <span class="tw-icon">📁</span>
+        <b>${esc(typeNode.type)}</b>
+        <span class="tw-count">${countChildren(typeNode)} حساب</span>
+      </div>
+      <div class="tree-children">
+        ${typeNode.children.map(g => `
+          <div class="tree-node tree-group">
+            <div class="tree-row" onclick="toggleNext(this)">
+              <span class="tw-arrow">▾</span>
+              <span class="tw-icon">🗂️</span>
+              <b>${esc(g.label)}</b>
+              <span class="tw-count">${g.children.length} حساب</span>
+            </div>
+            <div class="tree-children">
+              ${g.children.map(a => `
+                <div class="tree-node tree-account">
+                  <div class="tree-row">
+                    <span class="tw-arrow tw-leaf">•</span>
+                    <span class="tw-icon">📄</span>
+                    <span class="tw-no">${esc(a.acc_no)}</span> — ${esc(a.name)}
+                    ${a.budget > 0 ? `<span class="tw-budget">ميزانية: ${fmt(a.budget)}</span>` : ''}
+                  </div>
+                </div>`).join('')}
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+  $('.tree-type').each ? '' : null;
+}
+
+function countChildren(node) {
+  return node.children.reduce((n, c) => n + (c.children ? c.children.length : 1), 0);
+}
+
+function toggleNext(row) {
+  const kids = row.nextElementSibling;
+  if (!kids) return;
+  const isHidden = kids.style.display === 'none';
+  kids.style.display = isHidden ? '' : 'none';
+  const arrow = row.querySelector('.tw-arrow');
+  if (arrow) arrow.textContent = isHidden ? '▾' : '▸';
+}
+
+function expandAll() {
+  document.querySelectorAll('.tree-children').forEach(c => c.style.display = '');
+  document.querySelectorAll('.tw-arrow').forEach(a => a.textContent = '▾');
+}
+
+function collapseAll() {
+  document.querySelectorAll('.tree .tree-type > .tree-children').forEach(c => { c.style.display = ''; });
+  document.querySelectorAll('.tree-children .tree-children').forEach(c => c.style.display = 'none');
+  document.querySelectorAll('.tw-arrow').forEach(a => a.textContent = '▸');
+  document.querySelectorAll('.tree-type > .tree-row .tw-arrow').forEach(a => a.textContent = '▾');
+}
+
+loadTree();
+</script>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}لوحة التحكم{% endblock %}
+{% block page_title %}لوحة التحكم{% endblock %}
+{% block content %}
+
+<div class="quick-actions">
+  <a href="/journal" class="btn btn-gold">➕ قيد يومية جديد</a>
+  <a href="/ledger" class="btn btn-teal">📖 كشف حساب</a>
+  <a href="/trial-balance" class="btn btn-dark">⚖️ ميزان المراجعة</a>
+</div>
+
+<div class="cards-grid">
+  <div class="card">
+    <div class="lbl">حسابات دليل الحسابات</div>
+    <div class="val gold" id="st-accounts">—</div>
+  </div>
+  <div class="card teal">
+    <div class="lbl">إجمالي القيود</div>
+    <div class="val teal" id="st-entries">—</div>
+  </div>
+  <div class="card green">
+    <div class="lbl">إجمالي المدين (المرحل)</div>
+    <div class="val green" id="st-debit">—</div>
+  </div>
+  <div class="card red">
+    <div class="lbl">إجمالي الدائن (المرحل)</div>
+    <div class="val red" id="st-credit">—</div>
+  </div>
+  <div class="card">
+    <div class="lbl">قيود غير مرحلة</div>
+    <div class="val" id="st-drafts" style="color:var(--amber)">—</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-head"><h3>🕒 أحدث القيود</h3><a class="btn btn-sm btn-dark" href="/journal">الكل</a></div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>رقم الحركة</th><th>التاريخ</th><th>البيان</th><th>المدين</th><th>الحالة</th></tr></thead>
+        <tbody id="recent-body"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-head"><h3>ℹ️ معلومات الفترة الحالية</h3></div>
+    <div class="panel-body hint" style="font-size:13.5px">
+      <p style="margin-bottom:10px">📅 فترة التقارير: <b style="color:var(--text)">{{ period_from }}</b> إلى <b style="color:var(--text)">{{ period_to }}</b></p>
+      <p style="margin-bottom:10px">🏢 الشركة: <b style="color:var(--text)">{{ company_name }}</b></p>
+      <p style="margin-bottom:10px">🗺️ المناطق: المركز الرئيسي، المنطقة المركزية، المنطقة الشمالية، المنطقة الشرقية، المنطقة الجنوبية</p>
+      <p>💡 القيود غير المرحلة لا تظهر في الأستاذ العام وميزان المراجعة حتى يتم ترحيلها من صفحة دفتر اليومية.</p>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(async () => {
+  try {
+    const d = await api('/api/dashboard');
+    $('#st-accounts').textContent = d.stats.accounts;
+    $('#st-entries').textContent = d.stats.entries;
+    $('#st-debit').textContent = fmt(d.stats.total_debit);
+    $('#st-credit').textContent = fmt(d.stats.total_credit);
+    $('#st-drafts').textContent = d.stats.drafts;
+    const tb = $('#recent-body');
+    if (!d.recent.length) {
+      tb.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="big">📭</div>لا توجد قيود بعد</td></tr>';
+    } else {
+      tb.innerHTML = d.recent.map(e => `
+        <tr>
+          <td class="num">${esc(e.movement_no)}</td>
+          <td class="num">${fmtDate(e.entry_date)}</td>
+          <td>${esc(e.description || '—')}</td>
+          <td class="num">${fmt(e.total_debit)}</td>
+          <td>${e.status === 'posted' ? '<span class="badge posted">مرحل</span>' : '<span class="badge draft">مسودة</span>'}</td>
+        </tr>`).join('');
+    }
+  } catch (err) { toast(err.message, 'err'); }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}المستخدمون{% endblock %}
+{% block page_title %}إدارة المستخدمين{% endblock %}
+{% block content %}
+
+<div class="panel">
+  <div class="panel-head">
+    <h3>👥 المستخدمون (3 مستخدمين يعملون في نفس الوقت)</h3>
+    <button class="btn btn-teal btn-sm" onclick="openModal('addModal')">➕ مستخدم جديد</button>
+  </div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>الاسم</th><th class="num">اسم الدخول</th><th>الصلاحية</th><th class="num">تاريخ الإضافة</th><th class="num">إجراءات</th></tr></thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>{{ u.full_name }}</td>
+          <td class="num">{{ u.username }}</td>
+          <td>{% if u.role == 'admin' %}<span class="badge posted">مدير النظام</span>
+              {% elif u.role == 'accountant' %}<span class="badge region">محاسب</span>
+              {% else %}<span class="badge gray">مشاهدة فقط</span>{% endif %}</td>
+          <td class="num">{{ u.created_at }}</td>
+          <td class="num">
+            <button class="btn btn-sm btn-dark" onclick="resetPw({{ u.id }}, '{{ u.username }}')">🔑 كلمة مرور</button>
+            {% if u.id != user.id %}
+            <button class="btn btn-sm btn-red" onclick="delUser({{ u.id }}, '{{ u.username }}')">🗑️</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="panel-body hint">
+    💡 باقي أعضاء الفريق يفتحون السيستم من أجهزتهم عبر متصفح الإنترنت على عنوان: <b style="color:var(--gold);direction:ltr;display:inline-block">http://IP-الجهاز-الرئيسي:5000</b>
+  </div>
+</div>
+
+<!-- مودال إضافة مستخدم -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <div class="modal-head"><h3>مستخدم جديد</h3><button class="modal-close" data-close-modal>×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>الاسم الكامل *</label><input id="u-name" type="text"></div>
+      <div class="field"><label>اسم الدخول *</label><input id="u-user" type="text" placeholder="بالإنجليزية"></div>
+      <div class="field"><label>كلمة المرور *</label><input id="u-pass" type="text"></div>
+      <div class="field"><label>الصلاحية</label>
+        <select id="u-role">
+          <option value="accountant">محاسب (كل الصلاحيات المحاسبية)</option>
+          <option value="admin">مدير النظام</option>
+          <option value="viewer">مشاهدة فقط</option>
+        </select></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-gold" onclick="addUser()">حفظ</button>
+      <button class="btn btn-dark" data-close-modal>إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- مودال كلمة المرور -->
+<div class="modal-overlay" id="pwModal">
+  <div class="modal">
+    <div class="modal-head"><h3 id="pw-title">كلمة مرور جديدة</h3><button class="modal-close" data-close-modal>×</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="pw-id">
+      <div class="field"><label>كلمة المرور الجديدة</label><input id="pw-new" type="text"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-gold" onclick="savePw()">تغيير</button>
+      <button class="btn btn-dark" data-close-modal>إلغاء</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function addUser() {
+  try {
+    await api('/api/users', { method: 'POST', body: {
+      full_name: $('#u-name').value.trim(),
+      username: $('#u-user').value.trim(),
+      password: $('#u-pass').value,
+      role: $('#u-role').value,
+    }});
+    closeModal('addModal');
+    toast('تمت إضافة المستخدم');
+    setTimeout(() => location.reload(), 800);
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+function resetPw(id, username) {
+  $('#pw-title').textContent = `كلمة مرور جديدة لـ ${username}`;
+  $('#pw-id').value = id;
+  $('#pw-new').value = '';
+  openModal('pwModal');
+}
+
+async function savePw() {
+  try {
+    await api(`/api/users/${$('#pw-id').value}/password`, { method: 'POST', body: { password: $('#pw-new').value } });
+    closeModal('pwModal');
+    toast('تم تغيير كلمة المرور');
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function delUser(id, username) {
+  if (!await confirmDlg(`حذف المستخدم ${username}؟`)) return;
+  try {
+    await api('/api/users/' + id, { method: 'DELETE' });
+    toast('تم حذف المستخدم');
+    setTimeout(() => location.reload(), 700);
+  } catch (e) { toast(e.message, 'err'); }
+}
+</script>
+{% endblock %}

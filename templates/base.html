@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}نظام الحسابات{% endblock %} — {{ company_name }}</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%23d9a441'/><text x='50' y='68' font-size='52' text-anchor='middle'>ح</text></svg>">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">ح</div>
+      <div>
+        <b>النظام المحاسبي</b>
+        <small>{{ company_name }}</small>
+      </div>
+    </div>
+    <nav class="nav">
+      {% set nav = [
+        ('/', '🏠', 'لوحة التحكم'),
+        ('/accounts', '📚', 'دليل الحسابات'),
+        ('/accounts/tree', '🌳', 'شجرة الحسابات'),
+        ('/journal', '📒', 'دفتر اليومية'),
+        ('/ledger', '📖', 'الأستاذ العام'),
+        ('/trial-balance', '⚖️', 'ميزان المراجعة'),
+        ('/budget', '📊', 'الموازنة التقديرية'),
+      ] %}
+      {% for url, ic, label in nav %}
+      <a href="{{ url }}" class="{{ 'active' if request.path == url }}"><span class="ic">{{ ic }}</span>{{ label }}</a>
+      {% endfor %}
+      {% if user.role == 'admin' %}
+      <a href="/users" class="{{ 'active' if request.path == '/users' }}"><span class="ic">👥</span>المستخدمون</a>
+      <a href="/audit" class="{{ 'active' if request.path == '/audit' }}"><span class="ic">🛡️</span>سجل العمليات</a>
+      {% endif %}
+      <a href="/help" class="{{ 'active' if request.path == '/help' }}"><span class="ic">📘</span>دليل الاستخدام</a>
+      <a href="/settings" class="{{ 'active' if request.path == '/settings' }}"><span class="ic">⚙️</span>الإعدادات</a>
+      <a href="/logout"><span class="ic">🚪</span>تسجيل الخروج</a>
+    </nav>
+    <div class="side-footer">
+      © جميع الحقوق محفوظة<br><b>محاسب / أحمد عبدالله</b>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <h2>{% block page_title %}{% endblock %}</h2>
+      <div class="user-chip">
+        <div class="avatar">{{ user.full_name[0] }}</div>
+        <div>{{ user.full_name }}<span class="role">{{ role_name }}</span></div>
+      </div>
+    </header>
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+    <footer class="footer-note">© جميع الحقوق محفوظة — <b>محاسب / أحمد عبدالله</b></footer>
+  </main>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

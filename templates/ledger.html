@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}الأستاذ العام{% endblock %}
+{% block page_title %}الأستاذ العام{% endblock %}
+{% block content %}
+
+<div class="panel">
+  <div class="filters">
+    <div class="field"><label>الحساب *</label>
+      <select id="flt-acc"><option value="">— اختر الحساب —</option></select></div>
+    <div class="field"><label>من تاريخ</label><input type="date" id="flt-from"></div>
+    <div class="field"><label>إلى تاريخ</label><input type="date" id="flt-to"></div>
+    <div class="field"><label>المنطقة</label>
+      <select id="flt-region"><option value="">كل المناطق</option>
+        {% for r in REGIONS %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+      </select></div>
+    <button class="btn btn-teal" onclick="loadLedger()">🔍 عرض الكشف</button>
+    <a class="btn btn-gold" href="#" onclick="exportLink();return false;">📊 تصدير Excel</a>
+  </div>
+
+  <div id="result"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function init() {
+  try {
+    const d = await api('/api/accounts');
+    $('#flt-acc').innerHTML = '<option value="">— اختر الحساب —</option>' + d.accounts.map(a =>
+      `<option value="${esc(a.acc_no)}">${esc(a.acc_no)} - ${esc(a.name)}</option>`).join('');
+    $('#flt-from').value = '{{ period_from }}';
+    $('#flt-to').value = '{{ period_to }}';
+    loadLedger();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+function qs() {
+  const p = new URLSearchParams();
+  p.set('acc_no', $('#flt-acc').value.trim());
+  if ($('#flt-from').value) p.set('from', $('#flt-from').value);
+  if ($('#flt-to').value) p.set('to', $('#flt-to').value);
+  if ($('#flt-region').value) p.set('region', $('#flt-region').value);
+  return p.toString();
+}
+
+function exportLink() {
+  if (!$('#flt-acc').value) return toast('اختر الحساب أولًا', 'err');
+  location.href = '/ledger/export.xlsx?' + qs();
+}
+
+async function loadLedger() {
+  const accNo = $('#flt-acc').value.trim();
+  const box = $('#result');
+  if (!accNo) {
+    box.innerHTML = '<div class="empty-state"><div class="big">📖</div>اختر رقم الحساب ثم اضغط «عرض الكشف»</div>';
+    return;
+  }
+  try {
+    const d = await api('/api/ledger?' + qs());
+    let rowsHtml;
+    if (!d.rows.length) {
+      rowsHtml = '<tr><td colspan="7" class="empty-state">لا توجد حركات في هذه الفترة</td></tr>';
+    } else {
+      rowsHtml = d.rows.map(r => `
+        <tr>
+          <td class="num">${fmtDate(r.date)}</td>
+          <td class="num">${esc(r.movement_no)}</td>
+          <td>${esc(r.description || '—')}</td>
+          <td><span class="badge region">${esc(r.region)}</span></td>
+          <td class="num" style="color:var(--green)">${r.debit ? fmt(r.debit) : ''}</td>
+          <td class="num" style="color:var(--red)">${r.credit ? fmt(r.credit) : ''}</td>
+          <td class="num" style="font-weight:700">${fmt(r.balance)}</td>
+        </tr>`).join('');
+    }
+    const balColor = d.totals.balance >= 0 ? 'var(--green)' : 'var(--red)';
+    box.innerHTML = `
+      <div class="cards-grid" style="margin:20px">
+        <div class="card"><div class="lbl">الحساب</div><div class="val gold" style="font-size:18px">${esc(d.account.name)}</div></div>
+        <div class="card teal"><div class="lbl">رقم الحساب</div><div class="val teal" style="font-size:18px;direction:ltr">${esc(d.account.acc_no)}</div></div>
+        <div class="card green"><div class="lbl">الرصيد الافتتاحي</div><div class="val green" style="font-size:18px">${fmt(d.opening)}</div></div>
+        <div class="card"><div class="lbl">الرصيد النهائي</div><div class="val" style="font-size:18px;color:${balColor}">${fmt(d.totals.balance)}</div></div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th class="num">التاريخ</th><th class="num">رقم الحركة</th><th>البيان</th><th>المنطقة</th>
+            <th class="num">مدين</th><th class="num">دائن</th><th class="num">الرصيد</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+          <tfoot><tr>
+            <td colspan="4" style="text-align:center">إجمالي الحركة${d.opening ? ` (بدون الرصيد الافتتاحي ${fmt(d.opening)})` : ''}</td>
+            <td class="num">${fmt(d.totals.debit)}</td>
+            <td class="num">${fmt(d.totals.credit)}</td>
+            <td class="num" style="color:${balColor}">${fmt(d.totals.balance)}</td>
+          </tr></tfoot>
+        </table>
+      </div>`;
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+init();
+</script>
+{% endblock %}

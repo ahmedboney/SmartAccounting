@@ -1,0 +1,8 @@
+# استبعاد البيانات المحلية والأسرار
+instance/
+__pycache__/
+*.pyc
+build/
+dist/
+*.log
+.env
