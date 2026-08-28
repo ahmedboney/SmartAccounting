@@ -7,7 +7,7 @@ import requests
 import openpyxl
 
 sys.stdout.reconfigure(encoding="utf-8")
-BASE = "http://localhost:5000"
+BASE = os.environ.get("TEST_BASE", "http://localhost:5000")
 ok_count = 0
 fail = []
 
@@ -563,7 +563,8 @@ check("API المركز المالي يعمل", r.status_code == 200)
 check("فيه أصول", len(d["assets"]) >= 1, str(d["assets"][:1]))
 check("فيه التزامات/حقوق ملكية", len(d["liabilities_equity"]) >= 1, str(d["liabilities_equity"][:1]))
 check("المستند منفعة صافي متراكم موجود", "net_cumulative" in d)
-check("إجمالي الأصول رقم موجب", d["assets_total"] > 0, str(d["assets_total"]))
+check("مجموع الأصول = مجموع صفوفها",
+      abs(d["assets_total"] - sum(a["amount"] for a in d["assets"])) < 0.01, str(d["assets_total"]))
 
 r = s.get(BASE + "/api/cash-flow")
 d = r.json()
@@ -582,6 +583,28 @@ check("تصدير المركز المالي", wb.active.title.lower() == "الم
 wb = load_xl("/cash-flow/export.xlsx")
 check("تصدير التدفقات النقدية", "تدفق" in wb.active.title.lower())
 
+print("== الاستعادة من النسخ الاحتياطي (آخر قاعدة البيانات) ==")
+r = sv.post(BASE + f"/api/restore/{requests.utils.quote(target)}")
+check("viewer ممنوع من الاستعادة", r.status_code == 403)
+r = s.post(BASE + "/api/restore/bad%5C..%5Csecret.key")
+check("اسم نسخة غير صالح يرفض", r.status_code == 400)
+r = s.post(BASE + "/api/journal", json={
+    "movement_no": "MV-RESTORE-1", "entry_date": "2027-04-01",
+    "region": "المنطقة الشرقية", "description": "قيد قبل الاستعادة", "entry_type": "عادي",
+    "status": "posted",
+    "lines": [{"account_id": 1, "debit": 30, "credit": 0},
+              {"account_id": 2, "debit": 0, "credit": 30}]})
+check("إنشاء قيد قبل الاستعادة", r.status_code in (200, 201), r.text[:150])
+r = s.get(BASE + "/api/journal?q=MV-RESTORE-1")
+before = any(e["movement_no"] == "MV-RESTORE-1" for e in r.json()["entries"])
+check("القيد موجود قبل الاستعادة", before)
+r = s.post(BASE + f"/api/restore/{requests.utils.quote(target)}")
+check("إتمام الاستعادة", r.json().get("ok"), r.text[:150])
+r = s.get(BASE + "/api/journal?q=MV-RESTORE-1")
+after = any(e["movement_no"] == "MV-RESTORE-1" for e in r.json()["entries"])
+check("القيد المضافة اختفت بعد الاستعادة", not after)
+r = s.get(BASE + "/api/accounts")
+check("النظام يعمل طبيعي بعد الاستعادة", r.status_code == 200)
 
 print("=" * 46)
 if fail:

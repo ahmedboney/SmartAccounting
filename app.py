@@ -1457,6 +1457,19 @@ def api_backup_download(name):
     return send_file(path, as_attachment=True, download_name=name)
 
 
+@app.route("/api/restore/<name>", methods=["POST"])
+@admin_required
+def api_backup_restore(name):
+    try:
+        db.restore_backup(name)
+    except (ValueError, FileNotFoundError) as e:
+        return jsonify(error=f"فشل الاستعادة: {e}"), 400
+    except Exception as e:
+        return jsonify(error=f"فشل الاستعادة: {e}"), 500
+    db.audit(g.user["full_name"], "استعادة نسخة احتياطية", name)
+    return jsonify(ok=True, message="تمت الاستعادة بنجاح — أعد تسجيل الدخول")
+
+
 # ------------------------------------------------------------------
 # التصدير والقوالب
 # ------------------------------------------------------------------

@@ -44,6 +44,8 @@
       <div class="alert ok" style="font-size:12.5px">
         ✔ نسخة أوتوماتيك بتتعمل كل شهر جديد من تلقاء نفسها، وبنحتفظ بآخر 24 نسخة.
         الملفات محفوظة على جهاز السيرفر داخل مجلد <b>instance\backups</b>
+        <br>🔄 زر «استعادة» يسوي نسخة أمان تلقائية للوضع الحالي أولاً، ثم يصدّر
+        بيانات النسخة المختارة محل قاعدة البيانات الجارية.
       </div>
       <div class="tbl-wrap">
         <table class="tbl">
@@ -134,7 +136,8 @@ async function loadBackups() {
         <td class="num" style="direction:ltr">${esc(b.name)}</td>
         <td class="num">${esc(b.modified)}</td>
         <td class="num">${fmtSize(b.size)}</td>
-        <td class="num"><a class="btn btn-sm btn-teal" href="/api/backups/${encodeURIComponent(b.name)}">⬇️ تنزيل</a></td>
+        <td class="num"><a class="btn btn-sm btn-teal" href="/api/backups/${encodeURIComponent(b.name)}">⬇️ تنزيل</a>
+        <button class="btn btn-sm btn-gold" onclick="restoreBackup('${encodeURIComponent(b.name)}')">🔄 استعادة</button></td>
       </tr>`).join('');
   } catch (e) { toast(e.message, 'err'); }
 }
@@ -146,6 +149,16 @@ async function doBackup() {
     toast('تم إنشاء النسخة بنجاح ✔');
     location.href = '/api/backups/' + encodeURIComponent(d.name);
     loadBackups();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function restoreBackup(name) {
+  name = decodeURIComponent(name);
+  if (!await confirmDlg('استعادة النسخة «' + name + '»؟\nستُسوى نسخة أمان تلقائية للوضع الحالي قبل الاستعادة، ثم تُسيقاد بيانات النسخة المختارة. متابعة؟')) return;
+  try {
+    const d = await api('/api/restore/' + encodeURIComponent(name), { method: 'POST' });
+    toast(d.message || 'تمت الاستعادة ✔');
+    setTimeout(() => location.reload(), 1200);
   } catch (e) { toast(e.message, 'err'); }
 }
 

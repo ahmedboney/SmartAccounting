@@ -421,6 +421,26 @@ def auto_monthly_backup():
 SAFE_BACKUP_NAME = re.compile(r"^(auto|manual)-[A-Za-z0-9_\-.]+\.db$")
 
 
+def restore_backup(name):
+    """يستعيد نسخة احتياطية مقيدة بالاسم الآمن — يسوي نسخة أمان أولاً ثم يحل محل القاعدة"""
+    if not SAFE_BACKUP_NAME.match(name):
+        raise ValueError("اسم النسخة غير صالح")
+    src = BACKUP_DIR / name
+    if not src.exists():
+        raise FileNotFoundError("النسخة غير موجودة")
+    try:
+        safe_name = create_backup(prefix="pre-restore")
+    except Exception:
+        safe_name = None
+    conn = connect()
+    try:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    finally:
+        conn.close()
+    shutil.copy2(src, DB_PATH)
+    return safe_name
+
+
 def list_backups():
     if not BACKUP_DIR.exists():
         return []
