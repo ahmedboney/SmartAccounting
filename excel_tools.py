@@ -504,6 +504,98 @@ def export_budget(entries, summary, company, subtitle_extra="", acc_user="", sig
     return to_bytes(wb)
 
 
+def _fin_style(ws, data_start, nrows, ncol):
+    """تظليل صفوف العناوين والإجماليات داخل التقارير المالية"""
+    for i in range(nrows):
+        rr = data_start + i
+        label = ws.cell(row=rr, column=2).value or ""
+        label = str(label)
+        is_sec = label.startswith(("أولاً", "ثانياً", "ثالثاً"))
+        is_tot = ("إجمالي" in label) or label.startswith("صافي") or label.startswith("الرصيد الافتتاحي")
+        if is_sec or is_tot:
+            for c in range(1, ncol + 1):
+                cell = ws.cell(row=rr, column=c)
+                cell.font = Font(name="Arial", size=12, bold=True, color=INK)
+                cell.fill = PatternFill("solid", fgColor="BFBFBF" if is_tot else "F2F2F2")
+
+
+def export_income(data, company, subtitle_extra="", acc_user="", signatures=None):
+    """قائمة الدخل — إيرادات ومصروفات وصافي الدخل للفترة"""
+    headers = ["رقم الحساب", "البيان", "المبلغ"]
+    rows = [["", "أولاً: الإيرادات", ""]]
+    for r in data["revenues"]:
+        rows.append([r["acc_no"], r["name"], r["amount"]])
+    rows.append(["", "إجمالي الإيرادات", data["revenues_total"]])
+    rows.append(["", "ثانياً: المصروفات", ""])
+    for r in data["expenses"]:
+        rows.append([r["acc_no"], r["name"], round(r["amount"], 2)])
+    rows.append(["", "إجمالي المصروفات", data["expenses_total"]])
+    rows.append(["", "صافي الدخل / (الخسارة)", data["net"]])
+    subs = [company]
+    if subtitle_extra:
+        subs.append(subtitle_extra)
+    ncol = len(headers)
+    wb, ws, nr = build_report("قائمة الدخل", "قائمة الدخل", subs, headers, rows,
+                              num_cols=(2,), landscape=False)
+    _fin_style(ws, len(subs) + 3, len(rows), ncol)
+    for i in range(len(rows)):
+        rr = len(subs) + 3 + i
+        label = ws.cell(row=rr, column=2).value or ""
+        if str(label).startswith("صافي"):
+            val = ws.cell(row=rr, column=3).value
+            if isinstance(val, (int, float)) and val < 0:
+                ws.cell(row=rr, column=3).font = Font(bold=True, color="FF0000")
+    add_signatures(ws, nr, ncol, acc_user=acc_user, signatures=signatures)
+    return to_bytes(wb)
+
+
+def export_balance(data, company, subtitle_extra="", acc_user="", signatures=None):
+    """المركز المالي — الموجودات مقابل الالتزامات وحقوق الملكية"""
+    headers = ["رقم الحساب", "البيان", "المبلغ"]
+    rows = [["", "أولاً: الموجودات (الأصول)", ""]]
+    for r in data["assets"]:
+        rows.append([r["acc_no"], r["name"], r["amount"]])
+    rows.append(["", "إجمالي الموجودات", data["assets_total"]])
+    rows.append(["", "ثانياً: الالتزامات وحقوق الملكية", ""])
+    for r in data["liabilities_equity"]:
+        rows.append([r["acc_no"], r["name"], r["amount"]])
+    rows.append(["", "إجمالي الالتزامات وحقوق الملكية (بدون الأرباح)", data["liab_equity_total"]])
+    rows.append(["", "الأرباح / (الخسائر) المتراكمة", data["net_cumulative"]])
+    rows.append(["", "إجمالي الالتزامات وحقوق الملكية (بعد الأرباح المتراكمة)",
+                 round(data["liab_equity_total"] + data["net_cumulative"], 2)])
+    if not data.get("balanced"):
+        diff_row = ["", "فرق الميزان", data.get("difference", 0)]
+        rows.append(diff_row)
+    subs = [company]
+    if subtitle_extra:
+        subs.append(subtitle_extra)
+    ncol = len(headers)
+    wb, ws, nr = build_report("المركز المالي", "المركز المالي", subs, headers, rows,
+                              num_cols=(2,), landscape=False)
+    _fin_style(ws, len(subs) + 3, len(rows), ncol)
+    add_signatures(ws, nr, ncol, acc_user=acc_user, signatures=signatures)
+    return to_bytes(wb)
+
+
+def export_cashflow(data, company, subtitle_extra="", acc_user="", signatures=None):
+    """التدفقات النقدية (مبسّط) — حركة حسابات الصندوق والبنوك"""
+    headers = ["رقم الحساب", "الحساب", "رصيد افتتاحي", "تدفقات داخلة",
+               "تدفقات خارجة", "رصيد نهائي"]
+    rows = [[r["acc_no"], r["name"], r["opening"], r["inflow"], r["outflow"], r["closing"]]
+            for r in data["rows"]]
+    t = data["totals"]
+    subs = [company]
+    if subtitle_extra:
+        subs.append(subtitle_extra)
+    ncol = len(headers)
+    wb, ws, nr = build_report("التدفقات النقدية", "التدفقات النقدية (مبسّط)", subs, headers, rows,
+                              totals=["", "الإجمالي"] + [round(t[k], 2) for k in
+                                                          ["opening", "inflow", "outflow", "closing"]],
+                              num_cols=(2, 3, 4, 5), landscape=False)
+    add_signatures(ws, nr, ncol, acc_user=acc_user, signatures=signatures)
+    return to_bytes(wb)
+
+
 # ======================================================================
 # قوالب فارغة للتحميل
 # ======================================================================

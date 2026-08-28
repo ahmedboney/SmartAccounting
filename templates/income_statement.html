@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}قائمة الدخل{% endblock %}
+{% block page_title %}قائمة الدخل{% endblock %}
+{% block content %}
+
+<div class="panel">
+  <div class="filters">
+    <div class="field"><label>من تاريخ</label><input type="date" id="flt-from"></div>
+    <div class="field"><label>إلى تاريخ</label><input type="date" id="flt-to"></div>
+    <div class="field"><label>المنطقة</label>
+      <select id="flt-region"><option value="">كل المناطق</option>
+        {% for r in REGIONS %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+      </select></div>
+    <button class="btn btn-teal" onclick="loadRep()">🔍 عرض قائمة الدخل</button>
+    <a class="btn btn-gold" href="#" onclick="exportLink();return false;">📊 تصدير Excel</a>
+  </div>
+
+  <div id="result">
+    <div class="empty-state"><div class="big">📈</div>حدد الفترة ثم اضغط «عرض قائمة الدخل»</div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function qs() {
+  const p = new URLSearchParams();
+  if ($('#flt-from').value) p.set('from', $('#flt-from').value);
+  if ($('#flt-to').value) p.set('to', $('#flt-to').value);
+  if ($('#flt-region').value) p.set('region', $('#flt-region').value);
+  return p.toString();
+}
+
+function exportLink() { location.href = '/income-statement/export.xlsx?' + qs(); }
+
+function secRow(label) {
+  return '<tr style="background:var(--line);"><td colspan="3" style="padding:8px 12px;font-weight:700;color:var(--ink)">' + esc(label) + '</td></tr>';
+}
+function totRow(label, val, cls) {
+  const col = val !== null && val !== undefined ? '<td class="num">' + (val === '' ? '' : fmt(val)) + '</td>' : '<td></td>';
+  return '<tr><td colspan="2" style="text-align:center;font-weight:700;background:var(--border)">' + esc(label) + '</td>' + col + '</tr>';
+}
+
+async function loadRep() {
+  try {
+    const d = await api('/api/income-statement?' + qs());
+    const rows = [];
+    rows.push(secRow('أولاً: الإيرادات'));
+    d.revenues.forEach(r => {
+      rows.push('<tr><td class="num">' + esc(r.acc_no) + '</td><td>' + esc(r.name) + '</td><td class="num">' + (r.amount ? fmt(r.amount) : '') + '</td></tr>');
+    });
+    rows.push(totRow('إجمالي الإيرادات', d.revenues_total));
+    rows.push(secRow('ثانياً: المصروفات'));
+    d.expenses.forEach(r => {
+      rows.push('<tr><td class="num">' + esc(r.acc_no) + '</td><td>' + esc(r.name) + '</td><td class="num">' + (r.amount ? fmt(r.amount) : '') + '</td></tr>');
+    });
+    rows.push(totRow('إجمالي المصروفات', d.expenses_total));
+    const netCls = d.net >= 0 ? 'style="color:var(--green);font-weight:700"' : 'style="color:var(--red);font-weight:700"';
+    rows.push('<tr><td colspan="2" style="text-align:center;font-weight:700;background:var(--border)">صافي الدخل / (الخسارة)</td><td class="num" ' + netCls + '>' + fmt(d.net) + '</td></tr>');
+
+    $('#result').innerHTML = '<div class="tbl-wrap"><table class="tbl">' +
+      '<thead><tr><th class="num">رقم الحساب</th><th>البيان</th><th class="num">المبلغ</th></tr></thead>' +
+      '<tbody>' + rows.join('') + '</tbody></table></div>';
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+$('#flt-from').value = '{{ period_from }}';
+$('#flt-to').value = '{{ period_to }}';
+loadRep();
+</script>
+{% endblock %}

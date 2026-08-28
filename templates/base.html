@@ -26,6 +26,9 @@
         ('/ledger', '📖', 'الأستاذ العام'),
         ('/trial-balance', '⚖️', 'ميزان المراجعة'),
         ('/budget', '📊', 'الموازنة التقديرية'),
+        ('/income-statement', '📈', 'قائمة الدخل'),
+        ('/balance-sheet', '🏦', 'المركز المالي'),
+        ('/cash-flow', '💵', 'التدفقات النقدية'),
       ] %}
       {% for url, ic, label in nav %}
       <a href="{{ url }}" class="{{ 'active' if request.path == url }}"><span class="ic">{{ ic }}</span>{{ label }}</a>

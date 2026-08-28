@@ -409,9 +409,9 @@ def auto_monthly_backup():
     has_this_month = any(p.name.startswith(f"auto-{marker}") for p in BACKUP_DIR.glob("auto-*.db"))
     if not has_this_month:
         create_backup(prefix=f"auto-{today.isoformat()}")
-    # الاحتفاظ بآخر 24 نسخة فقط
-    all_backups = sorted(BACKUP_DIR.glob("*.db"))
-    for old in all_backups[:-24]:
+    # الاحتفاظ بأحدث 24 نسخة فقط (حسب وقت الإنشاء وليس ترتيب الأسماء)
+    all_backups = sorted(BACKUP_DIR.glob("*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for old in all_backups[24:]:
         try:
             old.unlink()
         except OSError:

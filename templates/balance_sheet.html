@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}المركز المالي{% endblock %}
+{% block page_title %}المركز المالي{% endblock %}
+{% block content %}
+
+<div class="panel">
+  <div class="filters">
+    <div class="field"><label>من تاريخ</label><input type="date" id="flt-from"></div>
+    <div class="field"><label>إلى تاريخ</label><input type="date" id="flt-to"></div>
+    <div class="field"><label>المنطقة</label>
+      <select id="flt-region"><option value="">كل المناطق</option>
+        {% for r in REGIONS %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+      </select></div>
+    <button class="btn btn-teal" onclick="loadRep()">🔍 عرض المركز المالي</button>
+    <a class="btn btn-gold" href="#" onclick="exportLink();return false;">📊 تصدير Excel</a>
+  </div>
+
+  <div id="result">
+    <div class="empty-state"><div class="big">🏦</div>حدد التاريخ ثم اضغط «عرض المركز المالي»</div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function qs() {
+  const p = new URLSearchParams();
+  if ($('#flt-from').value) p.set('from', $('#flt-from').value);
+  if ($('#flt-to').value) p.set('to', $('#flt-to').value);
+  if ($('#flt-region').value) p.set('region', $('#flt-region').value);
+  return p.toString();
+}
+
+function exportLink() { location.href = '/balance-sheet/export.xlsx?' + qs(); }
+
+function secRow(label) {
+  return '<tr style="background:var(--line);"><td colspan="3" style="padding:8px 12px;font-weight:700;color:var(--ink)">' + esc(label) + '</td></tr>';
+}
+function totRow(label, val) {
+  return '<tr><td colspan="2" style="text-align:center;font-weight:700;background:var(--border)">' + esc(label) + '</td><td class="num">' + (val === '' ? '' : fmt(val)) + '</td></tr>';
+}
+
+async function loadRep() {
+  try {
+    const d = await api('/api/balance-sheet?' + qs());
+    const rows = [];
+    rows.push(secRow('أولاً: الموجودات (الأصول)'));
+    d.assets.forEach(r => {
+      rows.push('<tr><td class="num">' + esc(r.acc_no) + '</td><td>' + esc(r.name) + '</td><td class="num">' + (r.amount ? fmt(r.amount) : '') + '</td></tr>');
+    });
+    rows.push(totRow('إجمالي الموجودات', d.assets_total));
+    rows.push(secRow('ثانياً: الالتزامات وحقوق الملكية'));
+    d.liabilities_equity.forEach(r => {
+      rows.push('<tr><td class="num">' + esc(r.acc_no) + '</td><td>' + esc(r.name) + '</td><td class="num">' + (r.amount ? fmt(r.amount) : '') + '</td></tr>');
+    });
+    rows.push(totRow('إجمالي الالتزامات وحقوق الملكية (بدون الأرباح)', d.liab_equity_total));
+    rows.push(totRow('الأرباح / (الخسائر) المتراكمة', d.net_cumulative));
+    rows.push(totRow('إجمالي الالتزامات وحقوق الملكية (بعد الأرباح المتراكمة)', d.total_with_income));
+
+    const badgeStyle = d.balanced
+      ? '<span class="balance-pill ok">✔ المركز المالي متوازن — الموجودات = الالتزامات + حقوق الملكية</span>'
+      : '<span class="balance-pill bad">✖ المركز المالي غير متوازن (فرق: ' + fmt(d.difference) + ')</span>';
+
+    $('#result').innerHTML =
+      '<div style="padding:18px 20px;display:flex;gap:14px;align-items:center;border-bottom:1px solid var(--border)">' + badgeStyle + '</div>' +
+      '<div class="tbl-wrap"><table class="tbl">' +
+      '<thead><tr><th class="num">رقم الحساب</th><th>البيان</th><th class="num">المبلغ</th></tr></thead>' +
+      '<tbody>' + rows.join('') + '</tbody></table></div>';
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+$('#flt-from').value = '{{ period_from }}';
+$('#flt-to').value = '{{ period_to }}';
+loadRep();
+</script>
+{% endblock %}

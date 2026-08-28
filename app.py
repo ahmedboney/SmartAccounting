@@ -941,6 +941,245 @@ def api_budget():
 
 
 # ------------------------------------------------------------------
+# التقارير المالية: قائمة الدخل / المركز المالي / التدفقات النقدية
+# ------------------------------------------------------------------
+
+def _posted_filter_parts(f, t, region):
+    parts = ["je.status='posted'"]
+    params: list = []
+    if region:
+        parts.append("je.region=?")
+        params.append(region)
+    if f:
+        parts.append("je.entry_date>=?")
+        params.append(f)
+    if t:
+        parts.append("je.entry_date<=?")
+        params.append(t)
+    return parts, params
+
+
+def income_query(f, t, region):
+    where, params = _posted_filter_parts(f, t, region)
+    rows = db.query(
+        f"""SELECT a.id, a.acc_no, a.name, a.type,
+                   COALESCE(SUM(jl.debit), 0) d, COALESCE(SUM(jl.credit), 0) c
+            FROM accounts a
+            LEFT JOIN journal_lines jl ON jl.account_id = a.id
+            LEFT JOIN journal_entries je ON je.id = jl.entry_id AND {' AND '.join(where)}
+            WHERE a.type IN ('إيرادات', 'مصروفات')
+            GROUP BY a.id
+            ORDER BY CAST(a.acc_no AS INTEGER), a.acc_no""",
+        params,
+    )
+    revenues, expenses = [], []
+    tot_r = tot_e = 0.0
+    for r in rows:
+        if r["type"] == "إيرادات":
+            amt = round(r["c"] - r["d"], 2)
+            revenues.append({"acc_no": r["acc_no"], "name": r["name"], "amount": amt})
+            tot_r += amt
+        else:
+            amt = round(r["d"] - r["c"], 2)
+            expenses.append({"acc_no": r["acc_no"], "name": r["name"], "amount": amt})
+            tot_e += amt
+    tot_r, tot_e = round(tot_r, 2), round(tot_e, 2)
+    return {"revenues": revenues, "revenues_total": tot_r,
+            "expenses": expenses, "expenses_total": tot_e,
+            "net": round(tot_r - tot_e, 2)}
+
+
+def _balances_asof(t, region):
+    """الرصيد النهائي لكل الحسابات حتى تاريخ t (+ المنطقة)"""
+    where, params = [], []
+    if region:
+        where.append("je.region=?")
+        params.append(region)
+    if t:
+        where.append("je.entry_date<=?")
+        params.append(t)
+    cond = (" AND " + " AND ".join(where)) if where else ""
+    rows = db.query(
+        f"""SELECT a.id, a.acc_no, a.name, a.type, a.opening_balance ob,
+                   COALESCE(SUM(jl.debit - jl.credit), 0) mv
+            FROM accounts a
+            LEFT JOIN journal_lines jl ON jl.account_id = a.id
+            LEFT JOIN journal_entries je ON je.id = jl.entry_id
+                 AND je.status='posted'{cond}
+            GROUP BY a.id
+            ORDER BY CAST(a.acc_no AS INTEGER), a.acc_no""",
+        params,
+    )
+    return {r["acc_no"]: {"id": r["id"], "acc_no": r["acc_no"], "name": r["name"],
+                          "type": r["type"], "amount": round((r["ob"] or 0) + (r["mv"] or 0), 2)}
+            for r in rows}
+
+
+def balance_query(f, t, region):
+    bal = _balances_asof(t, region)
+    assets, liab_eq = [], []
+    tot_a = tot_l = 0.0
+    for a in bal.values():
+        if a["type"] == "أصول":
+            assets.append(a)
+            tot_a += a["amount"]
+        elif a["type"] in ("خصوم", "حقوق ملكية"):
+            liab_eq.append(a)
+            tot_l += a["amount"]
+    net_cum = 0.0
+    for a in bal.values():
+        if a["type"] == "إيرادات":
+            net_cum += a["amount"]
+        elif a["type"] == "مصروفات":
+            net_cum -= a["amount"]
+    net_cum = round(net_cum, 2)
+    net_period = income_query(f, t, region)["net"]
+    total_with_income = round(tot_l + net_cum, 2)
+    diff = round(tot_a - total_with_income, 2)
+    return {"assets": assets, "assets_total": round(tot_a, 2),
+            "liabilities_equity": liab_eq, "liab_equity_total": round(tot_l, 2),
+            "net_cumulative": net_cum, "net_period": net_period,
+            "total_with_income": total_with_income, "difference": diff,
+            "balanced": abs(diff) <= 0.02}
+
+
+def cashflow_query(f, t, region):
+    cash = db.query(
+        """SELECT id, acc_no, name FROM accounts
+           WHERE type='أصول'
+             AND (name LIKE '%صندوق%' OR name LIKE '%بنك%' OR name LIKE '%نقد%')
+           ORDER BY CAST(acc_no AS INTEGER), acc_no"""
+    )
+    rows, tot = [], {"opening": 0.0, "inflow": 0.0, "outflow": 0.0, "closing": 0.0}
+    for a in cash:
+        ob = db.query_one("SELECT opening_balance FROM accounts WHERE id=?", (a["id"],))["opening_balance"] or 0
+        opening = ob
+        if region or f:
+            cond, params = ["jl.account_id=?", "je.status='posted'"], [a["id"]]
+            if f:
+                cond.append("je.entry_date<?")
+                params.append(f)
+            if region:
+                cond.append("je.region=?")
+                params.append(region)
+            opening += (db.query_one(
+                f"SELECT COALESCE(SUM(jl.debit - jl.credit), 0) s FROM journal_lines jl "
+                f"JOIN journal_entries je ON je.id = jl.entry_id WHERE {' AND '.join(cond)}",
+                params)["s"] or 0)
+        inflow = outflow = 0.0
+        cond, params = ["jl.account_id=?", "je.status='posted'"], [a["id"]]
+        if f:
+            cond.append("je.entry_date>=?")
+            params.append(f)
+        if t:
+            cond.append("je.entry_date<=?")
+            params.append(t)
+        if region:
+            cond.append("je.region=?")
+            params.append(region)
+        s = db.query_one(
+            f"""SELECT COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.debit ELSE 0 END), 0) i,
+                       COALESCE(SUM(CASE WHEN jl.credit > 0 THEN jl.credit ELSE 0 END), 0) o
+                FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id
+                WHERE {' AND '.join(cond)}""",
+            params,
+        )
+        inflow, outflow = round(s["i"], 2), round(s["o"], 2)
+        opening = round(opening, 2)
+        closing = round(opening + inflow - outflow, 2)
+        rows.append({"acc_no": a["acc_no"], "name": a["name"], "opening": opening,
+                     "inflow": inflow, "outflow": outflow, "closing": closing})
+        tot["opening"] += opening
+        tot["inflow"] += inflow
+        tot["outflow"] += outflow
+        tot["closing"] += closing
+    for k in tot:
+        tot[k] = round(tot[k], 2)
+    return {"rows": rows, "totals": tot, "net_flow": round(tot["inflow"] - tot["outflow"], 2)}
+
+
+@app.route("/income-statement")
+def income_statement_page():
+    return render_template("income_statement.html")
+
+
+@app.route("/balance-sheet")
+def balance_sheet_page():
+    return render_template("balance_sheet.html")
+
+
+@app.route("/cash-flow")
+def cash_flow_page():
+    return render_template("cash_flow.html")
+
+
+@app.route("/api/income-statement")
+def api_income():
+    f = (request.args.get("from") or "").strip()
+    t = (request.args.get("to") or "").strip()
+    region = (request.args.get("region") or "").strip()
+    return jsonify(income_query(f, t, region))
+
+
+@app.route("/api/balance-sheet")
+def api_balance():
+    f = (request.args.get("from") or "").strip()
+    t = (request.args.get("to") or "").strip()
+    region = (request.args.get("region") or "").strip()
+    return jsonify(balance_query(f, t, region))
+
+
+@app.route("/api/cash-flow")
+def api_cashflow():
+    f = (request.args.get("from") or "").strip()
+    t = (request.args.get("to") or "").strip()
+    region = (request.args.get("region") or "").strip()
+    return jsonify(cashflow_query(f, t, region))
+
+
+@app.route("/income-statement/export.xlsx")
+def export_income_xlsx():
+    f = (request.args.get("from") or "").strip()
+    t = (request.args.get("to") or "").strip()
+    region = (request.args.get("region") or "").strip()
+    data = income_query(f, t, region)
+    extra = f"المنطقة: {region}" if region else ""
+    buf = xl.export_income(data, db.get_setting("company_name"), extra,
+                           acc_user=g.user["full_name"], signatures=_signatures())
+    return send_file(buf, as_attachment=True,
+                     download_name="قائمة الدخل.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/balance-sheet/export.xlsx")
+def export_balance_xlsx():
+    f = (request.args.get("from") or "").strip()
+    t = (request.args.get("to") or "").strip()
+    region = (request.args.get("region") or "").strip()
+    data = balance_query(f, t, region)
+    extra = f"المنطقة: {region}" if region else ""
+    buf = xl.export_balance(data, db.get_setting("company_name"), extra,
+                            acc_user=g.user["full_name"], signatures=_signatures())
+    return send_file(buf, as_attachment=True,
+                     download_name="المركز المالي.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/cash-flow/export.xlsx")
+def export_cashflow_xlsx():
+    f = (request.args.get("from") or "").strip()
+    t = (request.args.get("to") or "").strip()
+    region = (request.args.get("region") or "").strip()
+    data = cashflow_query(f, t, region)
+    extra = f"المنطقة: {region}" if region else ""
+    buf = xl.export_cashflow(data, db.get_setting("company_name"), extra,
+                             acc_user=g.user["full_name"], signatures=_signatures())
+    return send_file(buf, as_attachment=True,
+                     download_name="التدفقات النقدية.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# ------------------------------------------------------------------
 # شجرة الحسابات
 # ------------------------------------------------------------------
 

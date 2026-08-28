@@ -537,6 +537,52 @@ r = s.post(BASE + "/api/settings", json={
 check("إعادة التواقيع الافتراضية", r.status_code == 200)
 
 
+print("== التقارير المالية ==")
+r = s.get(BASE + "/income-statement")
+check("صفحة قائمة الدخل تفتح", r.status_code == 200 and "قائمة الدخل" in r.text)
+r = s.get(BASE + "/balance-sheet")
+check("صفحة المركز المالي تفتح", r.status_code == 200 and "المركز المالي" in r.text)
+r = s.get(BASE + "/cash-flow")
+check("صفحة التدفقات النقدية تفتح", r.status_code == 200 and "التدفقات النقدية" in r.text)
+
+r = s.get(BASE + "/api/income-statement")
+d = r.json()
+check("API قائمة الدخل يعمل", r.status_code == 200)
+check("فيه إيرادات من حسابات إيرادات", len(d["revenues"]) >= 1, str(d["revenues"][:1]))
+check("فيه مصروفات", len(d["expenses"]) >= 1, str(d["expenses"][:1]))
+check("صافي الدخل = إيرادات - مصروفات",
+      abs(d["net"] - (d["revenues_total"] - d["expenses_total"])) < 0.01,
+      str(d))
+r = s.get(BASE + "/api/income-statement?from=2026-08-01&to=2026-08-31&region=المنطقة الجنوبية")
+d2 = r.json()
+check("فلترة قائمة الدخل تعمل", r.status_code == 200 and len(d2["expenses"]) >= 1)
+
+r = s.get(BASE + "/api/balance-sheet")
+d = r.json()
+check("API المركز المالي يعمل", r.status_code == 200)
+check("فيه أصول", len(d["assets"]) >= 1, str(d["assets"][:1]))
+check("فيه التزامات/حقوق ملكية", len(d["liabilities_equity"]) >= 1, str(d["liabilities_equity"][:1]))
+check("المستند منفعة صافي متراكم موجود", "net_cumulative" in d)
+check("إجمالي الأصول رقم موجب", d["assets_total"] > 0, str(d["assets_total"]))
+
+r = s.get(BASE + "/api/cash-flow")
+d = r.json()
+check("API التدفقات يعمل", r.status_code == 200)
+check("فيه حسابات نقدية (صندوق/بنك)", len(d["rows"]) >= 1, str(d["rows"][:1]))
+cash_t = d["totals"]
+check("صافي التدفق = داخل - خارج",
+      abs(d["net_flow"] - (cash_t["inflow"] - cash_t["outflow"])) < 0.01, str(d))
+
+print("== تصدير التقارير المالية ==")
+wb = load_xl("/income-statement/export.xlsx")
+ws = wb.active
+check("تصدير قائمة الدخل", "قائمة الدخل" in ws.title.lower() or "دخل" in str(ws.cell(1, 1).value))
+wb = load_xl("/balance-sheet/export.xlsx")
+check("تصدير المركز المالي", wb.active.title.lower() == "المركز المالي")
+wb = load_xl("/cash-flow/export.xlsx")
+check("تصدير التدفقات النقدية", "تدفق" in wb.active.title.lower())
+
+
 print("=" * 46)
 if fail:
     print(f"فشل {len(fail)} اختبار: {fail}")

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}التدفقات النقدية{% endblock %}
+{% block page_title %}التدفقات النقدية{% endblock %}
+{% block content %}
+
+<div class="panel">
+  <div class="filters">
+    <div class="field"><label>من تاريخ</label><input type="date" id="flt-from"></div>
+    <div class="field"><label>إلى تاريخ</label><input type="date" id="flt-to"></div>
+    <div class="field"><label>المنطقة</label>
+      <select id="flt-region"><option value="">كل المناطق</option>
+        {% for r in REGIONS %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+      </select></div>
+    <button class="btn btn-teal" onclick="loadRep()">🔍 عرض التدفقات</button>
+    <a class="btn btn-gold" href="#" onclick="exportLink();return false;">📊 تصدير Excel</a>
+  </div>
+
+  <div id="result">
+    <div class="empty-state"><div class="big">💵</div>حدد الفترة ثم اضغط «عرض التدفقات»</div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function qs() {
+  const p = new URLSearchParams();
+  if ($('#flt-from').value) p.set('from', $('#flt-from').value);
+  if ($('#flt-to').value) p.set('to', $('#flt-to').value);
+  if ($('#flt-region').value) p.set('region', $('#flt-region').value);
+  return p.toString();
+}
+
+function exportLink() { location.href = '/cash-flow/export.xlsx?' + qs(); }
+
+async function loadRep() {
+  try {
+    const d = await api('/api/cash-flow?' + qs());
+    const t = d.totals;
+    const rowsHtml = d.rows.length ? d.rows.map(r => `
+        <tr>
+          <td class="num">${esc(r.acc_no)}</td><td>${esc(r.name)}</td>
+          <td class="num">${r.opening ? fmt(r.opening) : ''}</td>
+          <td class="num" style="color:var(--green)">${r.inflow ? fmt(r.inflow) : ''}</td>
+          <td class="num" style="color:var(--red)">${r.outflow ? fmt(r.outflow) : ''}</td>
+          <td class="num">${r.closing ? fmt(r.closing) : ''}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="6" class="empty-state">لا توجد حسابات نقدية (صندوق / بنك) في النظام</td></tr>';
+
+    const netFlow = d.net_flow >= 0
+      ? '<span class="balance-pill ok">➚ صافي التدفق للفترة: ' + fmt(d.net_flow) + ' (داخل > خارج)</span>'
+      : '<span class="balance-pill bad">➘ صافي التدفق للفترة: ' + fmt(d.net_flow) + ' (خارج > داخل)</span>';
+
+    $('#result').innerHTML =
+      '<div style="padding:18px 20px;display:flex;gap:14px;align-items:center;border-bottom:1px solid var(--border)">' + netFlow + '</div>' +
+      '<div class="tbl-wrap"><table class="tbl">' +
+      '<thead><tr><th class="num">رقم الحساب</th><th>الحساب</th>' +
+      '<th class="num">رصيد افتتاحي</th><th class="num">تدفقات داخلة</th>' +
+      '<th class="num">تدفقات خارجة</th><th class="num">رصيد نهائي</th>' +
+      '</tr></thead><tbody>' + rowsHtml + '</tbody><tfoot><tr>' +
+      '<td colspan="2" style="text-align:center">الإجمالي</td>' +
+      '<td class="num">' + fmt(t.opening) + '</td><td class="num">' + fmt(t.inflow) + '</td>' +
+      '<td class="num">' + fmt(t.outflow) + '</td><td class="num">' + fmt(t.closing) + '</td>' +
+      '</tr></tfoot></table></div>';
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+$('#flt-from').value = '{{ period_from }}';
+$('#flt-to').value = '{{ period_to }}';
+loadRep();
+</script>
+{% endblock %}
