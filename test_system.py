@@ -613,6 +613,23 @@ check("القيد المضافة اختفت بعد الاستعادة", not afte
 r = s.get(BASE + "/api/accounts")
 check("النظام يعمل طبيعي بعد الاستعادة", r.status_code == 200)
 
+print("== مسح الشجرة (دليل الحسابات بالكامل) ==")
+r = sv.post(BASE + "/api/accounts/wipe")
+check("viewer ممنوع من مسح الشجرة", r.status_code == 403)
+r = s.post(BASE + "/api/accounts/wipe")
+d = r.json()
+check("مسح الشجرة يعمل", r.status_code == 200 and d.get("ok"), r.text[:150])
+check("كل الحسابات اتشالت", d.get("deleted_accounts", 0) >= 1, str(d))
+r = s.get(BASE + "/api/accounts")
+check("دليل الحسابات فاضي بعد المسح", len(r.json()["accounts"]) == 0, r.text[:150])
+r = s.get(BASE + "/api/accounts/tree")
+tree = r.json().get("tree", []) if r.status_code == 200 else []
+check("الشجرة فاضية بعد المسح", not tree, str(tree))
+r = s.get(BASE + "/api/journal")
+check("اليومية فاضية بعد المسح", len(r.json()["entries"]) == 0, r.text[:150])
+r = s.post(BASE + "/api/accounts/wipe")
+check("مسح على دليل فاضي يرفض", r.status_code == 400, r.text[:150])
+
 print("=" * 46)
 if fail:
     print(f"فشل {len(fail)} اختبار: {fail}")

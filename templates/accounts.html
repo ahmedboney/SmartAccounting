@@ -16,6 +16,9 @@
       {% endif %}
       <a class="btn btn-dark btn-sm" href="/templates/accounts.xlsx">📄 القالب</a>
       <a class="btn btn-gold btn-sm" href="/accounts/export.xlsx">📊 تصدير Excel</a>
+      {% if user.role == 'admin' %}
+      <button class="btn btn-red btn-sm" onclick="wipeAll()">🗑️ مسح الشجرة كاملة</button>
+      {% endif %}
     </div>
   </div>
   <div class="tbl-wrap">
@@ -178,6 +181,20 @@ async function doImport() {
   }
 }
 
-load();
+async function wipeAll() {
+  if (!await confirmDlg('تحذير نهائي ⚠️ هتحذف الشجرة كاملة (كل الحسابات وكل القيود) نهائيًا. متأكد؟')) return;
+  if (!await confirmDlg('تأكيد أخير: نفّذ مسح الشجرة الآن؟ لا يمكن التراجع إلا بالنسخ الاحتياطي')) return;
+  try {
+    const d = await api('/api/accounts/wipe', { method: 'POST' });
+    toast(`تم مسح الشجرة: ${d.deleted_accounts} حساب و${d.deleted_entries} قيد`);
+    load();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+(function () {
+  const q = new URLSearchParams(location.search).get('q');
+  if (q) { $('#search').value = q; render(ACCOUNTS.filter(a => a.acc_no.includes(q) || a.name.includes(q))); }
+  else load();
+})();
 </script>
 {% endblock %}

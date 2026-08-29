@@ -171,6 +171,10 @@ def load_secret():
 
 def init_db():
     INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
+    # الزراعة تتم مرة واحدة فقط عند إنشاء ملف القاعدة من الصفر.
+    # أي مسح/حذف لاحق (قيود/حسابات/مستخدمين/مناطق/إعدادات) يبقى نهائيًا
+    # لأن وجود الملف نفسه يمنع إعادة الزرع مهما طُمست البيانات.
+    brand_new = not DB_PATH.exists()
     conn = connect()
     conn.executescript(SCHEMA)
 
@@ -186,60 +190,62 @@ def init_db():
         conn.execute("ALTER TABLE accounts ADD COLUMN budget REAL NOT NULL DEFAULT 0")
         conn.commit()
 
-    # المستخدمون الافتراضيون
-    default_users = [
-        ("admin", "admin123", "مدير النظام", "admin"),
-        ("ahmed", "ahmed123", "محاسب / أحمد عبدالله", "accountant"),
-        ("viewer", "viewer123", "مستخدم مشاهدة", "viewer"),
-    ]
-    for username, pwd, full_name, role in default_users:
-        conn.execute(
-            "INSERT OR IGNORE INTO users (username, password_hash, full_name, role) VALUES (?,?,?,?)",
-            (username, generate_password_hash(pwd), full_name, role),
-        )
+    # أول تشغيل فقط: زراعة كاملة للافتراضيات (مستخدمين/دليل حسابات/إعدادات/مناطق).
+    if brand_new:
+        # المستخدمون الافتراضيون
+        default_users = [
+            ("admin", "admin123", "مدير النظام", "admin"),
+            ("ahmed", "ahmed123", "محاسب / أحمد عبدالله", "accountant"),
+            ("viewer", "viewer123", "مستخدم مشاهدة", "viewer"),
+        ]
+        for username, pwd, full_name, role in default_users:
+            conn.execute(
+                "INSERT OR IGNORE INTO users (username, password_hash, full_name, role) VALUES (?,?,?,?)",
+                (username, generate_password_hash(pwd), full_name, role),
+            )
 
-    # دليل حسابات ابتدائي (رقم، اسم، نوع، ميزانية تقديرية)
-    BUDGET_ACCOUNTS = [
-        ("5101", "رواتب وأجور", "مصروفات", 480000),
-        ("5102", "إيجارات", "مصروفات", 120000),
-        ("5103", "كهرباء ومياه", "مصروفات", 36000),
-        ("5104", "هاتف وإنترنت", "مصروفات", 18000),
-        ("5105", "صيانة", "مصروفات", 24000),
-        ("5106", "وقود ومواصلات", "مصروفات", 30000),
-        ("5107", "قرطاسية ومطبوعات", "مصروفات", 12000),
-        ("5108", "إعلانات ودعاية", "مصروفات", 15000),
-        ("5109", "ضيافة", "مصروفات", 10000),
-        ("5110", "صيانة سيرفر وشبكات", "مصروفات", 20000),
-        ("5201", "تأمينات", "مصروفات", 25000),
-        ("5202", "استشارات قانونية", "مصروفات", 8000),
-        ("5301", "اشتراكات برامج", "مصروفات", 15000),
-        ("5401", "مهمات سفر", "مصروفات", 20000),
-    ]
-    budget_map = {a[0]: a[3] for a in BUDGET_ACCOUNTS}
-    for acc_no, name, acc_type in STARTER_ACCOUNTS:
-        budget = budget_map.get(acc_no, 0)
-        conn.execute(
-            "INSERT OR IGNORE INTO accounts (acc_no, name, type, budget) VALUES (?,?,?,?)",
-            (acc_no, name, acc_type, budget),
-        )
+        # دليل حسابات ابتدائي (رقم، اسم، نوع، ميزانية تقديرية)
+        BUDGET_ACCOUNTS = [
+            ("5101", "رواتب وأجور", "مصروفات", 480000),
+            ("5102", "إيجارات", "مصروفات", 120000),
+            ("5103", "كهرباء ومياه", "مصروفات", 36000),
+            ("5104", "هاتف وإنترنت", "مصروفات", 18000),
+            ("5105", "صيانة", "مصروفات", 24000),
+            ("5106", "وقود ومواصلات", "مصروفات", 30000),
+            ("5107", "قرطاسية ومطبوعات", "مصروفات", 12000),
+            ("5108", "إعلانات ودعاية", "مصروفات", 15000),
+            ("5109", "ضيافة", "مصروفات", 10000),
+            ("5110", "صيانة سيرفر وشبكات", "مصروفات", 20000),
+            ("5201", "تأمينات", "مصروفات", 25000),
+            ("5202", "استشارات قانونية", "مصروفات", 8000),
+            ("5301", "اشتراكات برامج", "مصروفات", 15000),
+            ("5401", "مهمات سفر", "مصروفات", 20000),
+        ]
+        budget_map = {a[0]: a[3] for a in BUDGET_ACCOUNTS}
+        for acc_no, name, acc_type in STARTER_ACCOUNTS:
+            budget = budget_map.get(acc_no, 0)
+            conn.execute(
+                "INSERT OR IGNORE INTO accounts (acc_no, name, type, budget) VALUES (?,?,?,?)",
+                (acc_no, name, acc_type, budget),
+            )
 
-    # الإعدادات الافتراضية
-    year = datetime_now().year
-    defaults = {
-        "company_name": "نظام محاسبي متكامل",
-        "period_from": f"{year}-01-01",
-        "period_to": f"{year}-12-31",
-        "signatures": json.dumps([
-            {"title": "مدير إدارة الميزانية", "name": "محاسب / احمد عبدالله"},
-            {"title": "مدير الإدارة العامة المالية", "name": "محاسب / محمد احمد سيد"},
-        ], ensure_ascii=False),
-    }
-    for k, v in defaults.items():
-        conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?,?)", (k, v))
+        # الإعدادات الافتراضية
+        year = datetime_now().year
+        defaults = {
+            "company_name": "نظام محاسبي متكامل",
+            "period_from": f"{year}-01-01",
+            "period_to": f"{year}-12-31",
+            "signatures": json.dumps([
+                {"title": "مدير إدارة الميزانية", "name": "محاسب / احمد عبدالله"},
+                {"title": "مدير الإدارة العامة المالية", "name": "محاسب / محمد احمد سيد"},
+            ], ensure_ascii=False),
+        }
+        for k, v in defaults.items():
+            conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?,?)", (k, v))
 
-    # المناطق الافتراضية (أول مرة فقط)
-    for region_name in DEFAULT_REGIONS:
-        conn.execute("INSERT OR IGNORE INTO regions (name) VALUES (?)", (region_name,))
+        # المناطق الافتراضية
+        for region_name in DEFAULT_REGIONS:
+            conn.execute("INSERT OR IGNORE INTO regions (name) VALUES (?)", (region_name,))
 
     conn.commit()
     conn.close()

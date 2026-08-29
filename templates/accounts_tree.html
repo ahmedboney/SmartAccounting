@@ -10,6 +10,9 @@
       <button class="btn btn-dark btn-sm" onclick="expandAll()">⬇️ تفريع الكل</button>
       <button class="btn btn-dark btn-sm" onclick="collapseAll()">⬆️ طي الكل</button>
       <a class="btn btn-gold btn-sm" href="/accounts">📚 العرض المسطح</a>
+      {% if user.role == 'admin' %}
+      <button class="btn btn-red btn-sm" onclick="wipeTree()">🗑️ مسح الشجرة كاملة</button>
+      {% endif %}
     </div>
   </div>
   <div class="tree-container" id="tree"></div>
@@ -56,6 +59,12 @@ function renderTree(tree) {
                     <span class="tw-icon">📄</span>
                     <span class="tw-no">${esc(a.acc_no)}</span> — ${esc(a.name)}
                     ${a.budget > 0 ? `<span class="tw-budget">ميزانية: ${fmt(a.budget)}</span>` : ''}
+                    {% if user.role != 'viewer' %}
+                    <span class="tree-act">
+                      <button class="btn btn-sm btn-dark act-btn" title="تعديل" onclick='editAcc(${JSON.stringify({id: a.id, acc_no: a.acc_no, name: a.name, type: a.type, opening_balance: 0, budget: a.budget})})'>✏️</button>
+                      <button class="btn btn-sm btn-red act-btn" title="حذف" onclick="delTreeAcc(${a.id}, '${esc(a.acc_no)}')">🗑️</button>
+                    </span>
+                    {% endif %}
                   </div>
                 </div>`).join('')}
             </div>
@@ -88,6 +97,26 @@ function collapseAll() {
   document.querySelectorAll('.tree-children .tree-children').forEach(c => c.style.display = 'none');
   document.querySelectorAll('.tw-arrow').forEach(a => a.textContent = '▸');
   document.querySelectorAll('.tree-type > .tree-row .tw-arrow').forEach(a => a.textContent = '▾');
+}
+
+function editAcc(a) {
+  window.location.href = '/accounts?q=' + encodeURIComponent(a.acc_no || '');
+}
+
+async function delTreeAcc(id, no) {
+  if (!await confirmDlg(`حذف الحساب ${no}؟ لا يمكن الحذف إذا كان له حركات.`)) return;
+  try { await api('/api/accounts/' + id, { method: 'DELETE' }); toast('تم حذف الحساب'); loadTree(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+async function wipeTree() {
+  if (!await confirmDlg('تحذير نهائي ⚠️ هتحذف الشجرة كاملة (كل الحسابات وكل القيود) نهائيًا. متأكد؟')) return;
+  if (!await confirmDlg('تأكيد أخير: نفّذ مسح الشجرة الآن؟ لا يمكن التراجع إلا بالنسخ الاحتياطي')) return;
+  try {
+    const d = await api('/api/accounts/wipe', { method: 'POST' });
+    toast(`تم مسح الشجرة: ${d.deleted_accounts} حساب و${d.deleted_entries} قيد`);
+    loadTree();
+  } catch (e) { toast(e.message, 'err'); }
 }
 
 loadTree();

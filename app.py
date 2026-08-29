@@ -325,6 +325,21 @@ def api_accounts_delete(acc_id):
     return jsonify(ok=True)
 
 
+@app.route("/api/accounts/wipe", methods=["POST"])
+@admin_required
+def api_accounts_wipe():
+    """مسح الشجرة بالكامل: كل الحسابات وكل القيود نهائيًا (الإدارة فقط)."""
+    n_acc = db.query_one("SELECT COUNT(*) AS c FROM accounts")["c"]
+    n_ent = db.query_one("SELECT COUNT(*) AS c FROM journal_entries")["c"]
+    if not n_acc:
+        return jsonify(error="لا توجد حسابات لمسحها"), 400
+    db.execute("DELETE FROM journal_entries")
+    db.execute("DELETE FROM accounts")
+    db.audit(g.user["full_name"], "مسح الشجرة",
+             f"حذف نهائي: {n_acc} حساب و{n_ent} قيد")
+    return jsonify(ok=True, deleted_accounts=n_acc, deleted_entries=n_ent)
+
+
 @app.route("/api/accounts/budget", methods=["POST"])
 @require_write
 def api_accounts_bulk_budget():
