@@ -241,28 +241,6 @@ def init_db():
     for region_name in DEFAULT_REGIONS:
         conn.execute("INSERT OR IGNORE INTO regions (name) VALUES (?)", (region_name,))
 
-    # قيود تجريبية للبدء (يمكن حذفها من السيستم)
-    demo = [
-        ("1", f"{year}-08-01", "إيداع نقدي بالبنك", "المركز الرئيسي", "posted",
-         [("1102", 50000, 0), ("1101", 0, 50000)]),
-        ("2", f"{year}-08-05", "سداد إيجار المكتب بشيك", "المنطقة الشمالية", "posted",
-         [("5102", 12000, 0), ("1102", 0, 12000)]),
-        ("3", f"{year}-08-10", "شراء أثاث مكتبي بالآجل", "المنطقة المركزية", "draft",
-         [("1401", 8000, 0), ("2101", 0, 8000)]),
-    ]
-    if conn.execute("SELECT COUNT(*) c FROM journal_entries").fetchone()["c"] == 0:
-        admin = conn.execute("SELECT id FROM users WHERE username='admin'").fetchone()["id"]
-        for mv, dt, desc, region, status, lines in demo:
-            cur = conn.execute(
-                "INSERT INTO journal_entries (movement_no, entry_date, description, region, status, created_by) VALUES (?,?,?,?,?,?)",
-                (mv, dt, desc, region, status, admin),
-            )
-            for acc_no, d, c in lines:
-                acc = conn.execute("SELECT id FROM accounts WHERE acc_no=?", (acc_no,)).fetchone()
-                conn.execute(
-                    "INSERT INTO journal_lines (entry_id, account_id, debit, credit) VALUES (?,?,?,?)",
-                    (cur.lastrowid, acc["id"], d, c),
-                )
     conn.commit()
     conn.close()
     load_regions()

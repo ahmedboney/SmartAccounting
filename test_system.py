@@ -58,11 +58,17 @@ r = s.put(BASE + f"/api/accounts/{acc_id}", json={"acc_no": "8888", "name": "ح�
 check("تعديل حساب", r.json().get("ok"))
 r = s.delete(BASE + f"/api/accounts/{acc_id}")
 check("حذف حساب غير مستخدم", r.json().get("ok"))
-used = None
 accounts = s.get(BASE + "/api/accounts").json()["accounts"]
-for a in accounts:
-    if a["acc_no"] == "1101":
-        used = a["id"]
+ids = {a["acc_no"]: a["id"] for a in accounts}
+# نسجّل حركة على 1101/1102 عشان يبقيا محميين من الحذف (بديلًا عن القيود التجريبية)
+r = s.post(BASE + "/api/journal", json={
+    "movement_no": "T-USED-1", "entry_date": "2026-08-01",
+    "description": "قيود حماية حساب", "region": "المركز الرئيسي",
+    "status": "draft", "entry_type": "عادي",
+    "lines": [{"account_id": ids["1101"], "debit": 5, "credit": 0},
+              {"account_id": ids["1102"], "debit": 0, "credit": 5}]})
+check("تسجيل حركة على حساب الحماية", r.status_code in (200, 201), r.text[:150])
+used = ids["1101"]
 r = s.delete(BASE + f"/api/accounts/{used}")
 check("منع حذف حساب عليه حركات", r.status_code == 400)
 
@@ -70,7 +76,6 @@ print("== دفتر اليومية ==")
 r = s.get(BASE + "/api/next-movement-no")
 mv = r.json()["no"]
 print(f"   رقم الحركة المقترح: {mv}")
-ids = {a["acc_no"]: a["id"] for a in accounts}
 entry = {
     "movement_no": mv,
     "entry_date": "2026-08-15",
@@ -149,7 +154,7 @@ d = r.json()
 t = d["totals"]
 check("الميزان متوازن في حركة الفترة", abs(t["p_debit"] - t["p_credit"]) < 0.01, str(t))
 check("وجود صفوف", len(d["rows"]) > 3)
-r2 = s.get(BASE + "/api/trial-balance?region=المركز الرئيسي")
+r2 = s.get(BASE + "/api/trial-balance?region=المنطقة الشرقية")
 t2 = r2.json()["totals"]
 check("فلترة الميزان بالمنطقة تعمل", t2["p_debit"] > 0)
 
@@ -209,6 +214,8 @@ with open(r"C:\Users\Boney\Desktop\2023\دليل حسابات.xlsx", "rb") as fp
     r = s.post(BASE + "/api/accounts/import", files={"file": ("دليل حسابات.xlsx", fp)})
 d = r.json()
 check("استيراد دليل حسابات (قالبك)", r.status_code == 200, r.text[:150])
+accounts = s.get(BASE + "/api/accounts").json()["accounts"]
+ids = {a["acc_no"]: a["id"] for a in accounts}
 
 # نصنع ملف يومية ممتلئ ونستورده
 src = openpyxl.load_workbook(r"C:\Users\Boney\Desktop\2023\دفتر اليومية.xlsx")
@@ -263,8 +270,8 @@ r = s.post(BASE + "/api/journal", json={
     "movement_no": "MV-WIPE-1", "entry_date": "2027-03-15",
     "region": "المنطقة الشرقية", "description": "قيد مسح تجريبي", "entry_type": "عادي",
     "status": "posted",
-    "lines": [{"account_id": 1, "debit": 50, "credit": 0},
-              {"account_id": 2, "debit": 0, "credit": 50}]})
+    "lines": [{"account_id": ids["1101"], "debit": 50, "credit": 0},
+              {"account_id": ids["1102"], "debit": 0, "credit": 50}]})
 check("إنشاء قيد لاختبار المسح", r.status_code in (200, 201), r.text[:150])
 r = sv.post(BASE + "/api/journal/bulk-delete", json={"scope": "month", "month": "2027-03"})
 check("viewer ممنوع من المسح الجماعي", r.status_code == 403)
@@ -400,8 +407,8 @@ r = s.post(BASE + "/api/journal", json={
     "movement_no": "MV-REG-1", "entry_date": "2027-05-01",
     "region": "منطقة اختبار", "description": "اختبار المنطقة الجديدة",
     "entry_type": "عادي", "status": "draft",
-    "lines": [{"account_id": 1, "debit": 10, "credit": 0},
-              {"account_id": 2, "debit": 0, "credit": 10}]})
+    "lines": [{"account_id": ids["1101"], "debit": 10, "credit": 0},
+              {"account_id": ids["1102"], "debit": 0, "credit": 10}]})
 check("قيد بالمنطقة الجديدة يعمل", r.status_code in (200, 201))
 
 r = s.delete(BASE + f"/api/regions/{new_id}")
@@ -592,8 +599,8 @@ r = s.post(BASE + "/api/journal", json={
     "movement_no": "MV-RESTORE-1", "entry_date": "2027-04-01",
     "region": "المنطقة الشرقية", "description": "قيد قبل الاستعادة", "entry_type": "عادي",
     "status": "posted",
-    "lines": [{"account_id": 1, "debit": 30, "credit": 0},
-              {"account_id": 2, "debit": 0, "credit": 30}]})
+    "lines": [{"account_id": ids["1101"], "debit": 30, "credit": 0},
+              {"account_id": ids["1102"], "debit": 0, "credit": 30}]})
 check("إنشاء قيد قبل الاستعادة", r.status_code in (200, 201), r.text[:150])
 r = s.get(BASE + "/api/journal?q=MV-RESTORE-1")
 before = any(e["movement_no"] == "MV-RESTORE-1" for e in r.json()["entries"])
