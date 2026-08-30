@@ -572,6 +572,12 @@ check("فيه التزامات/حقوق ملكية", len(d["liabilities_equity"]
 check("المستند منفعة صافي متراكم موجود", "net_cumulative" in d)
 check("مجموع الأصول = مجموع صفوفها",
       abs(d["assets_total"] - sum(a["amount"] for a in d["assets"])) < 0.01, str(d["assets_total"]))
+check("مجموع الالتزامات = مجموع صفوفها (موجبة)",
+      abs(d["liab_equity_total"] - sum(a["amount"] for a in d["liabilities_equity"])) < 0.01
+      and all(a["amount"] >= 0 for a in d["liabilities_equity"]), str(d["liab_equity_total"]))
+check("معادلة التوازن: أصول = خصوم وحقوق ملكية + أرباح متراكمة",
+      abs(d["assets_total"] - (d["liab_equity_total"] + d["net_cumulative"])) <= 0.02,
+      f"difference={d['difference']}")
 
 r = s.get(BASE + "/api/cash-flow")
 d = r.json()

@@ -1039,14 +1039,17 @@ def balance_query(f, t, region):
             assets.append(a)
             tot_a += a["amount"]
         elif a["type"] in ("خصوم", "حقوق ملكية"):
-            liab_eq.append(a)
-            tot_l += a["amount"]
+            # رصيد الخصوم/حقوق الملكية الطبيعي دائن (سالب في الاتجاه المحاسبي)
+            # فيُعرض بقيمته الموجبة في التقرير
+            row = dict(a, amount=abs(a["amount"]))
+            liab_eq.append(row)
+            tot_l += row["amount"]
     net_cum = 0.0
     for a in bal.values():
         if a["type"] == "إيرادات":
-            net_cum += a["amount"]
+            net_cum += -a["amount"]   # الرصيد الدائن لإيراد = قيمة موجبة
         elif a["type"] == "مصروفات":
-            net_cum -= a["amount"]
+            net_cum -= a["amount"]    # الرصيد المدين لمصروف
     net_cum = round(net_cum, 2)
     net_period = income_query(f, t, region)["net"]
     total_with_income = round(tot_l + net_cum, 2)
