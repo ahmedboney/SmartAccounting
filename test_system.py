@@ -157,6 +157,16 @@ check("وجود صفوف", len(d["rows"]) > 3)
 r2 = s.get(BASE + "/api/trial-balance?region=المنطقة الشرقية")
 t2 = r2.json()["totals"]
 check("فلترة الميزان بالمنطقة تعمل", t2["p_debit"] > 0)
+# بدون تاريخ «من»: لا يجوز للحركة أن تظهر مرتين (افتتاحي + حركة). يجب أن يكون الافتتاحي 0
+# والحركة تساوي إجمالي كل القيود المرحلة.
+r3 = s.get(BASE + "/api/trial-balance")
+t3 = r3.json()["totals"]
+check("بدون تاريخ: لا افتتاحي مكرر", t3["o_debit"] == 0 and t3["o_credit"] == 0, str(t3))
+check("بدون تاريخ: حركة 'مدين' موجبة", t3["p_debit"] > 0)
+# مجموع الحركة (مدين) يبقى كما هو بدون مضاعفة
+with_from = s.get(BASE + "/api/trial-balance?from=2026-01-01&to=2026-12-31").json()["totals"]
+check("الحركة غير مكررة (مدين)", abs(t3["p_debit"] - with_from["p_debit"]) < 0.01,
+      "all=%s withf=%s" % (t3["p_debit"], with_from["p_debit"]))
 
 print("== تصدير الإكسيل ==")
 def load_xl(url):

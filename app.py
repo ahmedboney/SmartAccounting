@@ -802,17 +802,25 @@ def trial_query(f, t, region):
     region_sql = "AND je.region=?" if region else ""
     base_args = [region] if region else []
 
-    openings = db.query(
-        f"""SELECT a.id, a.acc_no, a.name, a.opening_balance ob,
-                   COALESCE(SUM(jl.debit - jl.credit),0) pre
-            FROM accounts a
-            LEFT JOIN journal_lines jl ON jl.account_id=a.id
-            LEFT JOIN journal_entries je ON je.id=jl.entry_id
-                 AND je.status='posted' {('AND je.region=?' if region else '')}
-                 {('AND je.entry_date<?' if f else '')}
-            GROUP BY a.id""",
-        base_args + ([f] if f else []),
-    )
+    if f:
+        openings = db.query(
+            f"""SELECT a.id, a.acc_no, a.name, a.opening_balance ob,
+                       COALESCE(SUM(jl.debit - jl.credit),0) pre
+                FROM accounts a
+                LEFT JOIN journal_lines jl ON jl.account_id=a.id
+                LEFT JOIN journal_entries je ON je.id=jl.entry_id
+                     AND je.status='posted' {('AND je.region=?' if region else '')}
+                     AND je.entry_date<?
+                GROUP BY a.id""",
+            base_args + [f],
+        )
+    else:
+        openings = db.query(
+            """SELECT a.id, a.acc_no, a.name, a.opening_balance ob,
+                      0 pre
+               FROM accounts a""",
+            [],
+        )
 
     period = {
         r["account_id"]: r
